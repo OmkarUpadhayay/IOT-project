@@ -1,10 +1,21 @@
-/*jshint esversion:6*/
-
 $(function () {
     const { InferenceEngine, CVImage } = inferencejs;
     const inferEngine = new InferenceEngine();
     const video = $("#video")[0];
     var workerId;
+    let detectedCount = 0; // Counter for total detected objects
+    let countedObjects = new Set(); // Track objects that have already been counted
+    let previousPredictions = []; // Add this line to store previous frame predictions
+    const countInterval = 20; // Set the interval for counting objects
+    let frameCount = 0; // Initialize frame counter
+
+    // Define the Region of Interest (ROI) coordinates and dimensions
+    const roi = {
+        x: 100,   // X-coordinate of the top-left corner of ROI
+        y: 100,   // Y-coordinate of the top-left corner of ROI
+        width: 400, // Width of the ROI
+        height: 300 // Height of the ROI
+    };
 
     // Load AI Model
     const loadModelPromise = inferEngine
@@ -20,6 +31,10 @@ $(function () {
             video.onloadeddata = function () {
                 video.play();
                 resizeCanvas();
+                detectedCount = 0; // Reset counter when a new video is loaded
+                countedObjects.clear(); // Clear the set of counted objects
+                previousPredictions = []; // Clear previous predictions
+                $("#count").text(detectedCount); // Update the counter display
                 detectFrame();
             };
         }
@@ -30,46 +45,103 @@ $(function () {
 
     const resizeCanvas = function () {
         $("canvas").remove();
-        canvas = $("<canvas/>");
-        ctx = canvas[0].getContext("2d");
-
-        canvas[0].width = video.videoWidth;
-        canvas[0].height = video.videoHeight;
-        canvas.css({
+        canvas = $("<canvas/>").attr({
             width: video.clientWidth,
             height: video.clientHeight
+        }).css({
+            position: "absolute",
+            top: video.offsetTop,
+            left: video.offsetLeft,
+            pointerEvents: "none"
         });
 
-        $("body").append(canvas);
+        ctx = canvas[0].getContext("2d");
+        $("#video").parent().append(canvas);
     };
 
     const renderPredictions = function (predictions) {
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+        // Calculate scaling factors
+        const scaleX = video.clientWidth / video.videoWidth;
+        const scaleY = video.clientHeight / video.videoHeight;
+
         predictions.forEach(function (prediction) {
             let { x, y, width, height } = prediction.bbox;
-            let scaleX = ctx.canvas.width / video.videoWidth;
-            let scaleY = ctx.canvas.height / video.videoHeight;
 
-            ctx.strokeStyle = prediction.color;
-            ctx.lineWidth = 4;
-            ctx.strokeRect(x * scaleX, y * scaleY, width * scaleX, height * scaleY);
+            // Scale bounding box coordinates to canvas size
+            x = x * scaleX;
+            y = y * scaleY;
+            width = width * scaleX;
+            height = height * scaleY;
 
-            ctx.fillStyle = prediction.color;
-            ctx.fillRect(x * scaleX, y * scaleY - 20, ctx.measureText(prediction.class).width + 10, 20);
+            // Ensure the bounding box is within the canvas boundaries
+            x = Math.max(0, Math.min(x, video.clientWidth - width));
+            y = Math.max(0, Math.min(y, video.clientHeight - height));
 
-            ctx.font = font;
-            ctx.fillStyle = "#000";
-            ctx.fillText(prediction.class, x * scaleX + 5, y * scaleY - 15);
+            // Check if the object falls within the defined ROI
+            const isWithinROI = x >= roi.x && y >= roi.y && (x + width) <= (roi.x + roi.width) && (y + height) <= (roi.y + roi.height);
+
+            // If the object is within the ROI, proceed with detection logic
+            if (isWithinROI) {
+                // Generate a unique ID for the object based on its bounding box
+                const objectId = `${prediction.class}-${Math.round(x)}-${Math.round(y)}`;
+
+                // Check for overlap with previous predictions
+                const isNewObject = !previousPredictions.some(prev => {
+                    const prevX = prev.bbox.x * scaleX;
+                    const prevY = prev.bbox.y * scaleY;
+                    const prevWidth = prev.bbox.width * scaleX;
+                    const prevHeight = prev.bbox.height * scaleY;
+
+                    // Check if the bounding boxes overlap significantly
+                    return (x < prevX + prevWidth && x + width > prevX && y < prevY + prevHeight && y + height > prevY);
+                });
+
+                // If the object is new and within ROI, increment the counter
+                if (isNewObject) {
+                    countedObjects.add(objectId); // Mark the object as counted
+                    detectedCount++; // Increment the counter
+                    $("#count").text(detectedCount); // Update the counter display
+                }
+
+                // Draw bounding box
+                ctx.strokeStyle = "#FFFF00"; // Yellow
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, width, height);
+
+                // Draw label background
+                ctx.fillStyle = "#FFFF00";
+                ctx.fillRect(x, y - 20, ctx.measureText(prediction.class).width + 10, 20);
+
+                // Draw label text
+                ctx.font = font;
+                ctx.fillStyle = "#000000";
+                ctx.fillText(prediction.class, x + 5, y - 5);
+            }
         });
+
+        // Update previous predictions for the next frame
+        previousPredictions = predictions.map(pred => ({ bbox: pred.bbox, class: pred.class })); // Store current predictions
     };
 
     const detectFrame = function () {
         if (!workerId || video.paused || video.ended) return;
+
         const image = new CVImage(video);
         inferEngine
             .infer(workerId, image)
             .then((predictions) => {
-                renderPredictions(predictions);
+                frameCount++; // Increment frame counter
+
+                // Only count objects on specific frames
+                if (frameCount % countInterval === 0) {
+                    renderPredictions(predictions); // Render predictions and count objects
+                } else {
+                    // Just render predictions without counting
+                    renderPredictions(predictions); // Pass a flag to indicate no counting
+                }
+
                 requestAnimationFrame(detectFrame);
             })
             .catch((e) => {
