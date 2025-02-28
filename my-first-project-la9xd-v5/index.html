@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Baggage Detection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.20/lodash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/async/3.2.0/async.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/inferencejs"></script>
+    <link rel="stylesheet" href="./main.css">
+    <script src="./main.js"></script>
+</head>
+<body class="bg-purple-700 text-white flex flex-col items-center justify-center min-h-screen p-4 loading">
+    <div class="absolute top-4 left-4">
+        <a href="Setting.html">
+            <i class="fas fa-bars text-white text-2xl"></i>
+        </a>        
+    </div>
+    <h1 class="text-3xl font-bold mb-8">Real-Time Baggage Count</h1>
+    
+    <div class="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-8">
+        <div class="bg-orange-500 w-96 h-96 flex items-center justify-center rounded-lg shadow-lg relative">
+            <video id="video" class="absolute w-full h-full object-cover rounded-lg" autoplay playsinline></video>
+            <canvas id="canvas" class="absolute w-full h-full"></canvas>
+        </div>
+        
+        <div class="flex flex-col items-center space-y-4">
+            <div class="bg-orange-500 rounded-full px-6 py-3 shadow-lg">
+                <span class="text-white font-bold text-lg">Real-Time Count: <span id="count">0</span></span>
+            </div>
+            <div class="text-center">
+                <span class="block text-lg" id="date"></span>
+                <span class="block italic text-lg" id="time"></span>
+            </div>
+        </div>
+    </div>
+
+    <div id="fps" class="absolute bottom-4 left-4 text-lg"></div>
+</body>
+</html>
